@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  background-color: #0a0a0b;
+  color: #eef0f3;
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(229,148,53,0.05), transparent 40%),
+    radial-gradient(circle at 85% 100%, rgba(95,137,179,0.06), transparent 45%);
+}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #2b2c33; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes scan { 0% { top: 0%; } 100% { top: 100%; } }
+.scanline { animation: scan 5s linear infinite; }
