@@ -3,22 +3,31 @@ import TopBar from "./components/TopBar";
 import Stepper from "./components/Stepper";
 import MapView from "./components/MapView";
 import RosterPanel from "./components/RosterPanel";
-import BuyPanel from "./components/BuyPanel";
-import StylePanel from "./components/StylePanel";
 import SimulationView from "./components/SimulationView";
-import { ZONES, CT_SELECTABLE_ZONES } from "./data/zones";
-import { WEAPONS, STYLES, STARTING_MONEY, weaponById, armorById, grenadeById } from "./data/catalog";
+import { CT_SELECTABLE_ZONES, ZONE_MAP } from "./data/zones";
+import {
+  WEAPONS,
+  ARMOR_PRICE,
+  GRENADES,
+  STYLES,
+  STARTING_MONEY,
+  PLAYER_COLORS,
+  weaponById,
+  grenadeById,
+} from "./data/catalog";
 import { simulateRound } from "./engine/simulate";
 
+const ROLES = ["Entry", "Support", "Lurker", "AWP", "IGL"];
+
 function freshPlayers() {
-  const roles = ["Entry", "Support", "Lurker", "AWP", "IGL (Você)"];
-  return roles.map((role, i) => ({
+  return PLAYER_COLORS.map((c, i) => ({
     id: i + 1,
-    name: `Jogador ${i + 1}`,
-    role,
+    name: c.name,
+    colorHex: c.hex,
+    role: ROLES[i],
     money: STARTING_MONEY,
     weapon: "usp",
-    armor: "none",
+    armor: false,
     grenades: [],
     zone: null,
     utilTarget: null,
@@ -27,13 +36,22 @@ function freshPlayers() {
 }
 
 function spent(p) {
-  let s = weaponById(p.weapon).price + armorById(p.armor).price;
-  p.grenades.forEach((g) => (s += grenadeById(g).price));
-  return s;
+  const grenadePrice = p.grenades[0] ? grenadeById(p.grenades[0]).price : 0;
+  return weaponById(p.weapon).price + (p.armor ? ARMOR_PRICE : 0) + grenadePrice;
 }
 function remaining(p) {
   return p.money - spent(p);
 }
+
+const MODE_BY_STEP = ["buy", "position", "utility", "attitude", "attitude"];
+const PHASE_TAGS = ["FASE: COMPRA", "FASE: POSIÇÃO INICIAL", "FASE: UTILITÁRIAS", "FASE: ATITUDE", "FASE: SIMULAÇÃO"];
+const MAP_INSTRUCTIONS = [
+  "Selecione um jogador na lista e defina a compra dele",
+  "Selecione um jogador e clique numa zona pra posicioná-lo",
+  "Selecione um jogador com granada e clique no alvo do arremesso",
+  "Confirme a posição e escolha a atitude de cada jogador",
+  "Revise o plano — o round está pronto para simular",
+];
 
 export default function App() {
   const [players, setPlayers] = useState(freshPlayers());
@@ -47,6 +65,7 @@ export default function App() {
 
   const activePlayer = players.find((p) => p.id === activePlayerId);
   const teamMoney = players.reduce((acc, p) => acc + remaining(p), 0);
+  const roundNumber = ctScore + trScore + 1;
 
   function showToast(msg) {
     setToast(msg);
@@ -57,24 +76,28 @@ export default function App() {
   function updatePlayer(id, patch) {
     setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   }
-  function toggleGrenade(id, gid) {
-    setPlayers((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const has = p.grenades.includes(gid);
-        return { ...p, grenades: has ? p.grenades.filter((g) => g !== gid) : [...p.grenades, gid] };
-      })
-    );
+
+  function onSetWeapon(id, weaponId) {
+    updatePlayer(id, { weapon: weaponId });
+  }
+  function onToggleArmor(id) {
+    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, armor: !p.armor } : p)));
+  }
+  function onSetGrenade(id, gid) {
+    updatePlayer(id, { grenades: gid ? [gid] : [], utilTarget: gid ? players.find((p) => p.id === id).utilTarget : null });
+  }
+  function onSetStyle(id, styleId) {
+    updatePlayer(id, { style: styleId });
   }
 
   function onZoneClick(zoneId) {
-    const zone = ZONES.find((z) => z.id === zoneId);
+    const zone = ZONE_MAP[zoneId];
     if (step === 1 || step === 3) {
       updatePlayer(activePlayerId, { zone: zoneId });
       showToast(`${activePlayer.name} posicionado em ${zone.label}`);
     } else if (step === 2) {
       if (activePlayer.grenades.length === 0) {
-        showToast(`${activePlayer.name} não está carregando granadas`);
+        showToast(`${activePlayer.name} não está carregando granada`);
         return;
       }
       if (!activePlayer.zone) {
@@ -90,16 +113,17 @@ export default function App() {
     if (step === 0) {
       setPlayers((prev) =>
         prev.map((p) => {
-          const grenPool = ["flash", "smoke", "molotov", "he"];
-          const n = Math.floor(Math.random() * 3);
-          const gset = new Set();
-          while (gset.size < n) gset.add(grenPool[Math.floor(Math.random() * grenPool.length)]);
-          return {
-            ...p,
-            weapon: WEAPONS[Math.floor(Math.random() * WEAPONS.length)].id,
-            armor: Math.random() > 0.4 ? "vest" : "none",
-            grenades: [...gset],
-          };
+          let budget = p.money;
+          const affordableWeapons = WEAPONS.filter((w) => w.price <= budget);
+          const useDefault = Math.random() < 0.15 || affordableWeapons.length === 0;
+          const weapon = useDefault ? "usp" : affordableWeapons[Math.floor(Math.random() * affordableWeapons.length)].id;
+          budget -= weaponById(weapon).price;
+          const armor = budget >= ARMOR_PRICE && Math.random() > 0.4;
+          if (armor) budget -= ARMOR_PRICE;
+          const affordableGrenades = GRENADES.filter((g) => g.price <= budget);
+          const useGrenade = affordableGrenades.length > 0 && Math.random() > 0.35;
+          const grenade = useGrenade ? affordableGrenades[Math.floor(Math.random() * affordableGrenades.length)].id : null;
+          return { ...p, weapon, armor, grenades: grenade ? [grenade] : [] };
         })
       );
       showToast("Compra sorteada para o time");
@@ -120,7 +144,7 @@ export default function App() {
             : p
         )
       );
-      showToast("Alvos de utilidade sorteados");
+      showToast("Alvo de utilidade sorteado");
     }
   }
 
@@ -142,8 +166,8 @@ export default function App() {
 
   if (phase === "simulation" && result) {
     return (
-      <div className="min-h-screen">
-        <TopBar ctScore={ctScore} trScore={trScore} teamMoney={teamMoney} onRandom={() => {}} roundLabel="ROUND EM ANDAMENTO" />
+      <div className="h-screen flex flex-col overflow-hidden">
+        <TopBar ctScore={ctScore} trScore={trScore} teamMoney={teamMoney} roundLabel={`ROUND ${roundNumber}`} showRandom={false} />
         <SimulationView result={result} onContinue={afterSimulation} />
       </div>
     );
@@ -154,126 +178,49 @@ export default function App() {
     .map((p) => ({
       id: p.id,
       team: "CT",
+      color: p.colorHex,
       zoneId: p.zone,
       alive: true,
-      short: p.id,
+      short: p.name.slice(0, 1),
       label: p.name,
       selected: p.id === activePlayerId,
       onClick: () => setActivePlayerId(p.id),
     }));
 
   const utilMarkers = players
-    .filter((p) => p.zone && p.utilTarget)
+    .filter((p) => p.zone && p.utilTarget && p.grenades[0])
     .map((p) => ({
       fromZoneId: p.zone,
       toZoneId: p.utilTarget,
-      icon: grenadeById(p.grenades[0] ?? "smoke")?.icon ?? "💨",
+      icon: grenadeById(p.grenades[0]).icon,
     }));
 
-  const mapInstructions = [
-    "Selecione um jogador na lista e defina a compra dele",
-    "Selecione um jogador e clique numa zona pra posicioná-lo",
-    "Selecione um jogador com granada e clique no alvo do arremesso",
-    "Selecione um jogador, confirme a zona e escolha o estilo",
-    "Revise o plano — o round está pronto para simular",
-  ];
-  const phaseTags = ["FASE: COMPRA", "FASE: POSIÇÃO INICIAL", "FASE: UTILITÁRIAS", "FASE: POSIÇÃO FINAL", "FASE: SIMULAÇÃO"];
+  const mode = MODE_BY_STEP[step];
 
   return (
-    <div className="min-h-screen">
-      <TopBar ctScore={ctScore} trScore={trScore} teamMoney={teamMoney} onRandom={onRandom} roundLabel="ROUND 1 · PISTOL" />
+    <div className="h-screen flex flex-col overflow-hidden">
+      <TopBar ctScore={ctScore} trScore={trScore} teamMoney={teamMoney} onRandom={onRandom} roundLabel={`ROUND ${roundNumber}`} />
       <Stepper currentStep={step} onJump={setStep} />
 
-      <div className="grid grid-cols-[300px_1fr_300px] gap-px bg-line" style={{ height: "calc(100vh - 128px)" }}>
-        <div className="bg-panel p-4.5 overflow-y-auto">
-          {step === 0 && (
-            <BuyPanel
-              player={activePlayer}
-              remaining={remaining}
-              onSet={(field, val) => updatePlayer(activePlayerId, { [field]: val })}
-              onToggleGrenade={(gid) => toggleGrenade(activePlayerId, gid)}
-            />
-          )}
-          {step === 1 && (
-            <div>
-              <div className="font-display text-[13px] tracking-wider uppercase mb-3.5">Posição Inicial</div>
-              <div className="text-[11.5px] text-textFaint border border-dashed border-line p-4 mb-3.5 text-center">
-                Clique num jogador na lista à direita, depois clique numa zona no mapa pra posicioná-lo defendendo o
-                round.
-              </div>
-              <RosterPanel
-                players={players}
-                activePlayerId={activePlayerId}
-                onSelect={setActivePlayerId}
-                remaining={remaining}
-                show={{ zone: true, money: true }}
-              />
-            </div>
-          )}
-          {step === 2 && (
-            <div>
-              <div className="font-display text-[13px] tracking-wider uppercase mb-3.5">Utilitárias</div>
-              <div className="text-[11.5px] text-textFaint border border-dashed border-line p-4 mb-3.5 text-center">
-                Escolha o jogador e clique numa zona no mapa pra definir onde a primeira granada dele vai cair.
-              </div>
-              <RosterPanel
-                players={players}
-                activePlayerId={activePlayerId}
-                onSelect={setActivePlayerId}
-                remaining={remaining}
-                show={{ util: true, zone: true }}
-              />
-              {activePlayer.grenades.length > 0 ? (
-                <div className="mt-3.5 text-[11.5px] text-textMuted">
-                  Granada usada: <b className="text-textPrimary">{grenadeById(activePlayer.grenades[0]).name}</b>
-                </div>
-              ) : (
-                <div className="mt-3.5 text-[11.5px] text-red">{activePlayer.name} não comprou granadas.</div>
-              )}
-            </div>
-          )}
-          {step === 3 && (
-            <div>
-              <div className="font-display text-[13px] tracking-wider uppercase mb-3.5">Posição Final</div>
-              <div className="text-[11.5px] text-textFaint border border-dashed border-line p-4 mb-3.5 text-center">
-                Confirme (ou ajuste) a zona, e escolha o estilo de jogo de cada player.
-              </div>
-              <RosterPanel
-                players={players}
-                activePlayerId={activePlayerId}
-                onSelect={setActivePlayerId}
-                remaining={remaining}
-                show={{ zone: true, style: true }}
-              />
-              <StylePanel player={activePlayer} onSetStyle={(sid) => updatePlayer(activePlayerId, { style: sid })} />
-            </div>
-          )}
-          {step === 4 && (
-            <div>
-              <div className="font-display text-[13px] tracking-wider uppercase mb-3.5">Resumo do Round</div>
-              <div className="text-xs text-textMuted leading-relaxed">
-                Compra, posição e utilidades definidas. O time TR será revelado apenas quando a simulação começar.
-              </div>
-              <div className="text-[11.5px] text-textFaint border border-dashed border-line p-4 mt-4 text-center">
-                O motor de simulação roda a IA do time TR, movimento e trocas com base no que você definiu.
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-void flex flex-col">
-          <div className="flex items-center justify-between px-4.5 py-2.5 border-b border-line">
-            <span className="font-display text-xs tracking-wider uppercase">{mapInstructions[step]}</span>
-            <span className="font-display text-xs tracking-wider uppercase text-textPrimary">{phaseTags[step]}</span>
+      <div className="flex-1 min-h-0 grid grid-cols-[1fr_340px] gap-px bg-line">
+        <div className="bg-void flex flex-col min-h-0">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-line shrink-0">
+            <span className="font-display text-xs tracking-wider uppercase">{MAP_INSTRUCTIONS[step]}</span>
+            <span className="font-display text-xs tracking-wider uppercase text-textPrimary">{PHASE_TAGS[step]}</span>
           </div>
-          <div className="flex-1 flex items-center justify-center p-6">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-6">
             <div className="w-full max-w-[680px]">
-              <MapView tokens={tokens} utilMarkers={utilMarkers} onZoneClick={onZoneClick} showZoneHotspots={step === 1 || step === 2 || step === 3} />
+              <MapView
+                tokens={tokens}
+                utilMarkers={utilMarkers}
+                onZoneClick={onZoneClick}
+                showZoneHotspots={step === 1 || step === 2 || step === 3}
+              />
             </div>
           </div>
         </div>
 
-        <div className="bg-panel p-4.5 overflow-y-auto">
+        <div className="bg-panel p-4 overflow-y-auto min-h-0">
           <div className="font-display text-[13px] tracking-wider uppercase mb-3.5 flex items-center justify-between">
             Elenco <span className="font-body normal-case text-[11px] text-textFaint">CT</span>
           </div>
@@ -281,21 +228,16 @@ export default function App() {
             players={players}
             activePlayerId={activePlayerId}
             onSelect={setActivePlayerId}
-            remaining={remaining}
-            show={
-              step === 0
-                ? { money: true }
-                : step === 1
-                ? { zone: true }
-                : step === 2
-                ? { util: true, zone: true }
-                : { zone: true, style: true }
-            }
+            mode={mode}
+            onSetWeapon={onSetWeapon}
+            onToggleArmor={onToggleArmor}
+            onSetGrenade={onSetGrenade}
+            onSetStyle={onSetStyle}
           />
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-6 py-3 border-t border-line bg-gradient-to-t from-[#151619] to-[#101114]">
+      <div className="flex items-center justify-between px-6 py-3 border-t border-line bg-gradient-to-t from-[#151619] to-[#101114] shrink-0">
         <button
           disabled={step === 0}
           onClick={() => setStep((s) => Math.max(0, s - 1))}

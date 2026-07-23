@@ -20,7 +20,7 @@ export default function MapView({ tokens = [], utilMarkers = [], onZoneClick, sh
       <div className="scanline absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-orange/40 to-transparent z-[8] opacity-60" />
 
       {showZoneHotspots &&
-        ZONES.map((z) => (
+        ZONES.filter((z) => z.ctSelectable).map((z) => (
           <button
             key={z.id}
             onClick={() => onZoneClick && onZoneClick(z.id)}
@@ -68,20 +68,21 @@ export default function MapView({ tokens = [], utilMarkers = [], onZoneClick, sh
         const zone = ZONE_MAP[t.zoneId];
         if (!zone) return null;
         const isCT = t.team === "CT";
+        const color = isCT ? t.color || "#5f89b3" : "#d1554f";
         return (
           <div
             key={t.id}
             onClick={t.onClick}
-            className={`absolute w-[22px] h-[22px] -ml-[11px] -mt-[11px] rounded-full flex items-center justify-center text-[10px] font-mono font-semibold z-[22] transition-all duration-500 ease-out ${
+            className={`absolute w-[22px] h-[22px] -ml-[11px] -mt-[11px] rounded-full flex items-center justify-center text-[10px] font-mono font-semibold z-[22] transition-all duration-500 ease-out text-void ${
               t.onClick ? "cursor-pointer" : ""
-            } ${
-              isCT
-                ? "border-2 border-ctblue bg-gradient-to-br from-[#8ab4d8] to-ctblue text-void"
-                : "border-2 border-red bg-gradient-to-br from-[#e08b87] to-red text-void"
-            } ${t.selected ? "ring-4 ring-orange/40 !border-orange" : `ring-4 ${isCT ? "ring-ctblue/15" : "ring-red/15"}`} ${
-              !t.alive ? "opacity-25 grayscale scale-75" : ""
-            }`}
-            style={{ left: `${zone.x}%`, top: `${zone.y}%` }}
+            } ${!t.alive ? "opacity-25 grayscale scale-75" : ""}`}
+            style={{
+              left: `${zone.x}%`,
+              top: `${zone.y}%`,
+              border: `2px solid ${t.selected ? "#e59435" : color}`,
+              background: `radial-gradient(circle at 35% 30%, ${color}cc, ${color})`,
+              boxShadow: `0 0 0 4px ${t.selected ? "rgba(229,148,53,0.35)" : color + "26"}`,
+            }}
             title={t.label}
           >
             {t.short ?? t.label}

@@ -1,8 +1,8 @@
-const STEPS = ["Compra", "Posição Inicial", "Utilitárias", "Posição Final", "Simular"];
+const STEPS = ["Compra", "Posição Inicial", "Utilitárias", "Atitude", "Simular"];
 
 export default function Stepper({ currentStep, onJump }) {
   return (
-    <div className="flex items-center px-6 bg-void border-b border-line overflow-x-auto">
+    <div className="flex items-center px-6 bg-void border-b border-line overflow-x-auto shrink-0">
       {STEPS.map((s, i) => (
         <div
           key={s}

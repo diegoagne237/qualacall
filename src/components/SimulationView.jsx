@@ -42,6 +42,7 @@ export default function SimulationView({ result, onContinue }) {
     ...ctPlayers.map((p) => ({
       id: p.id,
       team: "CT",
+      color: p.color,
       zoneId: frame.positions[p.id],
       alive: frame.alive[p.id],
       short: p.id.replace("ct", ""),
@@ -66,7 +67,7 @@ export default function SimulationView({ result, onContinue }) {
   const aliveTR = Object.entries(frame.alive).filter(([id, a]) => id.startsWith("t") && a).length;
 
   return (
-    <div className="grid grid-cols-[1fr_320px] gap-px bg-line h-[calc(100vh-128px)]">
+    <div className="grid grid-cols-[1fr_320px] gap-px bg-line flex-1 min-h-0">
       <div className="bg-void flex flex-col">
         <div className="flex items-center justify-between px-4 py-2 border-b border-line">
           <span className="font-display text-xs tracking-widest uppercase text-textPrimary">

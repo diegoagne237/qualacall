@@ -1,6 +1,7 @@
 import { areAdjacent, shortestPath } from "./pathfinding";
 import { buildEnemyPlan } from "./teamAI";
-import { weaponById, styleById } from "../data/catalog";
+import { weaponById } from "../data/catalog";
+import { CT_SPAWN } from "../data/zones";
 
 export const ROUND_TICKS = 24; // compressed round (~115s of game time)
 const DEFUSE_TICKS = 6; // ticks after plant before detonation
@@ -11,14 +12,15 @@ function rand() {
 
 function buildCTPlayers(ctConfig) {
   return ctConfig.map((p) => {
-    const dest = p.zone || "ct_spawn";
-    const path = shortestPath("ct_spawn", dest) || ["ct_spawn"];
+    const dest = p.zone || CT_SPAWN;
+    const path = shortestPath(CT_SPAWN, dest) || [CT_SPAWN];
     return {
       id: `ct${p.id}`,
       name: p.name,
+      color: p.color,
       team: "CT",
       alive: true,
-      zone: "ct_spawn",
+      zone: CT_SPAWN,
       path,
       pathIndex: 0,
       weapon: p.weapon,
@@ -26,9 +28,7 @@ function buildCTPlayers(ctConfig) {
       grenades: p.grenades || [],
       utilTarget: p.utilTarget || null,
       style: p.style || "site",
-      ambushAvailable: p.style === "hidden",
       statusPenaltyTicks: 0,
-      hasEnteredDest: false,
     };
   });
 }
@@ -74,15 +74,11 @@ function applyUtilityOnEntry(enteringPlayer, allPlayers, tick, events) {
 function duelChance(ct, tr) {
   let chance = 50;
   chance += (weaponById(ct.weapon).power - weaponById(tr.weapon).power) * 20;
-  if (ct.armor === "vest") chance += 8;
+  if (ct.armor) chance += 8;
 
-  const ctStyle = styleById(ct.style);
-  if (ctStyle) {
-    if (ct.style === "hidden" && ct.ambushAvailable) chance += 15;
-    if (ct.style === "passive") chance += 5;
-    if (ct.style === "rush") chance -= 5;
-    if (ct.style === "midctrl" && ct.zone === "mid") chance += 5;
-  }
+  if (ct.style === "passive") chance += 6;
+  if (ct.style === "rush") chance -= 6;
+  if (ct.style === "site") chance += 2;
 
   if (ct.statusPenaltyTicks > 0) chance -= 20;
   if (tr.statusPenaltyTicks > 0) chance += 20;
@@ -143,7 +139,6 @@ export function simulateRound(ctConfig) {
           weapon: weaponById(winner.weapon || "usp").name,
           headshot: rand() < 0.3,
         });
-        if (ct.style === "hidden") ct.ambushAvailable = false;
       }
     }
     // decay status penalties
@@ -192,7 +187,7 @@ export function simulateRound(ctConfig) {
 
   return {
     targetSite,
-    ctPlayers: ctPlayers.map((p) => ({ id: p.id, name: p.name, team: p.team })),
+    ctPlayers: ctPlayers.map((p) => ({ id: p.id, name: p.name, team: p.team, color: p.color })),
     trPlayers: trPlayers.map((p) => ({ id: p.id, name: p.name, team: p.team })),
     frames,
     events,

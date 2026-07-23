@@ -1,8 +1,9 @@
-import { SITES } from "../data/zones";
+import { SITES, TR_SPAWN } from "../data/zones";
 import { shortestPath, areAdjacent } from "./pathfinding";
-import { GRENADES, WEAPONS } from "../data/catalog";
+import { GRENADES, weaponsByCategory } from "../data/catalog";
 
 const TR_NAMES = ["Rival 1", "Rival 2", "Rival 3", "Rival 4", "Rival 5"];
+const TR_PISTOLS = weaponsByCategory("pistol");
 
 // Counts how many CT players are positioned at or adjacent to a site zone —
 // a rough "defense strength" reading the AI uses to pick where to attack.
@@ -23,20 +24,20 @@ export function buildEnemyPlan(ctPlayers) {
     name,
     team: "TR",
     alive: true,
-    zone: "t_spawn",
+    zone: TR_SPAWN,
     path: [],
     pathIndex: 0,
-    weapon: WEAPONS[Math.floor(Math.random() * WEAPONS.length)].id,
-    armor: Math.random() > 0.5 ? "vest" : "none",
+    weapon: Math.random() > 0.3 ? TR_PISTOLS[Math.floor(Math.random() * TR_PISTOLS.length)].id : "usp",
+    armor: Math.random() > 0.5,
     grenades: Math.random() > 0.4 ? [GRENADES[Math.floor(Math.random() * GRENADES.length)].id] : [],
-    style: i === 4 ? "midctrl" : "rush",
+    style: i === 4 ? "site" : "rush",
     statusPenaltyTicks: 0,
   }));
 
   // 4 players push the chosen site, 1 holds/lurks mid for info.
   players.forEach((p, i) => {
-    const dest = i === 4 ? "mid" : targetSite;
-    const path = shortestPath("t_spawn", dest) || ["t_spawn"];
+    const dest = i === 4 ? "meio" : targetSite;
+    const path = shortestPath(TR_SPAWN, dest) || [TR_SPAWN];
     p.path = path;
   });
 
